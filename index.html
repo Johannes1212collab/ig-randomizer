@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IG Randomizer</title>
+<meta name="description" content="Pick one fair winner from an Instagram post's comments.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="IG Randomizer">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#e9edf2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1220" media="(prefers-color-scheme: dark)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=DM+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Layout: a ticket booth. The left column is the paperwork (comments, rules, entry list);
+     the right column is one marigold raffle ticket that stays in view and does the drawing. */
+  --paper:#e9edf2;
+  --surface:#ffffff;
+  --ink:#131a2b;
+  --muted:#566076;
+  --line:#cdd5e0;
+  --accent:#c2185b;
+  --accent-ink:#ffffff;
+  --ticket:#f6c445;
+  --ticket-ink:#1c1503;
+  --in:#156f45;
+  --in-bg:#dcf2e6;
+  --out:#8a4b00;
+  --out-bg:#fbecd0;
+  --font-display:"Big Shoulders Display","Arial Narrow",sans-serif;
+  --font-body:"Schibsted Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"DM Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+  --fs-xs:12px; --fs-s:14px; --fs-m:16px; --fs-l:20px; --fs-xl:30px; --fs-xxl:76px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0d1220; --surface:#161d2e; --ink:#e8ecf4; --muted:#9aa5ba; --line:#2c3551;
+    --accent:#ff6ba1; --accent-ink:#2b0613;
+    --in:#74dba8; --in-bg:#143524; --out:#f2bb64; --out-bg:#3a2a0c;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0d1220; --surface:#161d2e; --ink:#e8ecf4; --muted:#9aa5ba; --line:#2c3551;
+  --accent:#ff6ba1; --accent-ink:#2b0613;
+  --in:#74dba8; --in-bg:#143524; --out:#f2bb64; --out-bg:#3a2a0c;
+  color-scheme:dark;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--font-body); font-size:var(--fs-m); line-height:1.5;
+}
+button,input,textarea,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent); outline-offset:2px}
+.wrap{max-width:1140px; margin:0 auto; padding:28px 20px 64px; display:flex; flex-direction:column; gap:28px}
+
+/* Masthead */
+.mast{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:8px 24px;
+  border-bottom:2px solid var(--ink); padding-bottom:14px}
+.mast h1{margin:0; font-family:var(--font-display); font-weight:900; font-size:52px; line-height:.9;
+  letter-spacing:.01em; text-transform:uppercase}
+.mast h1 span{color:var(--accent)}
+.mast p{margin:0; color:var(--muted); font-size:var(--fs-s); max-width:44ch}
+
+.booth{display:grid; grid-template-columns:minmax(0,1.12fr) minmax(320px,.88fr); gap:32px; align-items:start}
+.paperwork{display:flex; flex-direction:column; gap:20px; min-width:0}
+.stage{position:sticky; top:20px; display:flex; flex-direction:column; gap:18px; min-width:0}
+
+/* Panels */
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px;
+  display:flex; flex-direction:column; gap:14px}
+.panel-head{display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 12px}
+.step{font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--accent); font-weight:500; letter-spacing:.06em}
+.panel h2, .stage h2{margin:0; font-family:var(--font-display); font-weight:900; font-size:var(--fs-xl);
+  line-height:1; text-transform:uppercase; letter-spacing:.02em}
+.badge{font-family:var(--font-mono); font-size:var(--fs-xs); padding:2px 8px; border-radius:999px;
+  background:var(--out-bg); color:var(--out); margin-left:auto}
+.hint{margin:0; color:var(--muted); font-size:var(--fs-s)}
+
+textarea, input[type="text"], input[type="number"]{
+  width:100%; background:var(--paper); border:1.5px solid var(--line); border-radius:9px; padding:10px 12px;
+}
+textarea:hover, input[type="text"]:hover, input[type="number"]:hover{border-color:var(--muted)}
+#comments{min-height:210px; resize:vertical; font-family:var(--font-mono); font-size:13px; line-height:1.55}
+#comments.dragging{border-color:var(--accent); border-style:dashed}
+.row{display:flex; flex-wrap:wrap; align-items:center; gap:10px}
+.btn{
+  appearance:none; border:1.5px solid var(--ink); background:transparent; border-radius:9px;
+  padding:8px 14px; font-weight:600; font-size:var(--fs-s); cursor:pointer; text-decoration:none; color:var(--ink);
+  display:inline-flex; align-items:center; gap:6px;
+}
+.btn:hover{background:var(--ink); color:var(--surface)}
+.btn[disabled]{opacity:.45; cursor:not-allowed}
+.btn.quiet{border-color:var(--line)}
+.btn.quiet:hover{background:var(--line); color:var(--ink)}
+.status{margin:0; font-size:var(--fs-s); font-weight:600}
+.status small{font-weight:400; color:var(--muted); font-size:inherit}
+details{font-size:var(--fs-s)}
+details summary{cursor:pointer; font-weight:600; color:var(--ink)}
+details ol{margin:8px 0 0; padding-left:20px; color:var(--muted); display:flex; flex-direction:column; gap:6px; max-width:62ch}
+details pre{margin:8px 0 0; padding:10px 12px; background:var(--paper); border-radius:9px; overflow-x:auto;
+  font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--muted); max-height:140px}
+
+/* Rules */
+.rules{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px 20px}
+.field{display:flex; flex-direction:column; gap:6px; min-width:0}
+.field.wide{grid-column:1/-1}
+.field > label, fieldset legend{font-weight:700; font-size:var(--fs-s)}
+fieldset{border:0; margin:0; padding:0; min-width:0}
+fieldset legend{padding:0; margin-bottom:6px}
+.choices{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px}
+.choice{display:flex; gap:10px; align-items:flex-start; border:1.5px solid var(--line); border-radius:10px;
+  padding:10px 12px; cursor:pointer}
+.choice:has(input:checked){border-color:var(--ink); background:var(--paper)}
+.choice input{margin:3px 0 0; accent-color:var(--accent); flex:none}
+.choice b{display:block; font-size:var(--fs-s)}
+.choice span{display:block; font-size:var(--fs-xs); color:var(--muted)}
+.check{display:flex; gap:8px; align-items:center; font-size:var(--fs-s); margin-top:8px}
+.check input{accent-color:var(--accent)}
+.stepper{display:flex; align-items:stretch; gap:6px; max-width:170px}
+.stepper input{text-align:center; font-family:var(--font-mono); font-variant-numeric:tabular-nums}
+.stepper .btn{padding:0 14px; font-size:var(--fs-l); line-height:1}
+
+/* Entry list */
+.tally{display:flex; flex-wrap:wrap; gap:6px 8px; align-items:center}
+.pill{font-family:var(--font-mono); font-size:var(--fs-xs); padding:3px 9px; border-radius:999px; white-space:nowrap}
+.pill.in{background:var(--in-bg); color:var(--in)}
+.pill.out{background:var(--out-bg); color:var(--out)}
+.tabs{display:flex; gap:6px; margin-left:auto}
+.tabs button{appearance:none; border:0; background:transparent; padding:4px 10px; border-radius:999px;
+  font-size:var(--fs-s); font-weight:600; color:var(--muted); cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--ink); color:var(--surface)}
+.entries{list-style:none; margin:0; padding:0; max-height:400px; overflow-y:auto; border-top:1px solid var(--line)}
+.entries li{display:grid; grid-template-columns:minmax(0,150px) minmax(0,1fr) auto; gap:12px; align-items:baseline;
+  padding:9px 2px; border-bottom:1px solid var(--line); font-size:var(--fs-s)}
+.entries .who{font-family:var(--font-mono); font-weight:500; overflow-wrap:anywhere}
+.entries .said{color:var(--muted); overflow-wrap:anywhere}
+.entries li.is-out .who{text-decoration:line-through; text-decoration-color:var(--muted); color:var(--muted)}
+.entries .none{display:block; color:var(--muted); padding:18px 2px}
+
+/* The ticket */
+.ticket{
+  position:relative; background:var(--ticket); color:var(--ticket-ink); border-radius:16px;
+  padding:18px 24px 24px; transform:rotate(-1.2deg); display:flex; flex-direction:column; gap:14px;
+  box-shadow:0 1px 0 rgba(0,0,0,.08), 0 14px 30px -18px rgba(0,0,0,.55);
+}
+.ticket::before{content:""; position:absolute; inset:7px; border:1.5px solid currentColor; opacity:.28;
+  border-radius:11px; pointer-events:none}
+.stub{display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+  font-family:var(--font-mono); font-size:var(--fs-xs); letter-spacing:.08em; text-transform:uppercase}
+.stub b{font-weight:500; font-variant-numeric:tabular-nums}
+.tear{position:relative; border-top:2px dashed currentColor; opacity:1; margin:0 -24px; height:0}
+.tear::before,.tear::after{content:""; position:absolute; top:-12px; width:22px; height:22px; border-radius:50%;
+  background:var(--paper)}
+.tear::before{left:-11px} .tear::after{right:-11px}
+.face{display:flex; flex-direction:column; gap:6px; min-height:206px; justify-content:center}
+.face .label{font-family:var(--font-mono); font-size:var(--fs-xs); letter-spacing:.1em; text-transform:uppercase}
+.face .big{font-family:var(--font-display); font-weight:900; font-size:var(--big, var(--fs-xxl)); line-height:.92;
+  overflow-wrap:anywhere; font-variant-numeric:tabular-nums}
+.face .sub{font-size:var(--fs-m); font-weight:600}
+.face .quote{font-size:var(--fs-s); max-height:5.9em; overflow-y:auto; overflow-wrap:anywhere}
+.face .meta{font-family:var(--font-mono); font-size:var(--fs-xs); opacity:.8}
+.ticket.is-won{animation:land .45s cubic-bezier(.2,1.4,.4,1)}
+.ticket.is-rolling .big{opacity:.75}
+@keyframes land{from{transform:rotate(-1.2deg) scale(1.05)} to{transform:rotate(-1.2deg) scale(1)}}
+@media (prefers-reduced-motion: reduce){ .ticket.is-won{animation:none} }
+
+.draw{
+  appearance:none; width:100%; border:2px solid var(--ink); border-radius:12px; cursor:pointer;
+  background:var(--accent); color:var(--accent-ink); padding:14px 18px;
+  font-family:var(--font-display); font-weight:900; font-size:var(--fs-xl); letter-spacing:.04em; text-transform:uppercase;
+  box-shadow:4px 4px 0 var(--ink); transition:transform .08s, box-shadow .08s;
+}
+.draw:hover{transform:translate(-1px,-1px); box-shadow:5px 5px 0 var(--ink)}
+.draw:active{transform:translate(3px,3px); box-shadow:1px 1px 0 var(--ink)}
+.draw[disabled]{opacity:.5; cursor:not-allowed; transform:none; box-shadow:4px 4px 0 var(--ink)}
+.under{margin:0; font-size:var(--fs-s); color:var(--muted)}
+.log{display:flex; flex-direction:column; gap:10px}
+.log h3{margin:0; font-size:var(--fs-s); font-weight:700}
+.log ol{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:4px;
+  font-family:var(--font-mono); font-size:var(--fs-xs)}
+.log li{display:flex; flex-wrap:wrap; gap:4px 10px; padding:6px 0; border-bottom:1px solid var(--line)}
+.log li b{font-weight:500}
+.log li span{color:var(--muted)}
+#record{min-height:150px; font-family:var(--font-mono); font-size:var(--fs-xs); resize:vertical; background:var(--surface)}
+[hidden]{display:none !important}
+
+@media (max-width: 880px){
+  .booth{grid-template-columns:minmax(0,1fr)}
+  .stage{position:static}
+  .mast h1{font-size:42px}
+}
+@media (max-width: 520px){
+  .rules, .choices{grid-template-columns:minmax(0,1fr)}
+  .entries li{grid-template-columns:minmax(0,1fr) auto}
+  .entries .said{grid-column:1/-1; grid-row:2}
+  .tabs{margin-left:0}
+  .panel{padding:16px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <h1>IG <span>Randomizer</span></h1>
+    <p>Pick one fair winner from a post's comments. Everything runs in this browser tab; no comments are sent anywhere.</p>
+  </header>
+
+  <main class="booth">
+    <div class="paperwork">
+
+      <section class="panel" aria-labelledby="h-comments">
+        <div class="panel-head">
+          <span class="step">01</span>
+          <h2 id="h-comments">Comments</h2>
+          <span class="badge" id="example-badge">Example comments</span>
+        </div>
+        <label class="hint" for="comments">Paste the post's comments, or drop a CSV or JSON export onto the box.</label>
+        <textarea id="comments" spellcheck="false" autocomplete="off"></textarea>
+        <div class="row">
+          <label class="btn" for="file">Choose a file</label>
+          <input id="file" type="file" accept=".csv,.tsv,.txt,.json,text/csv,text/plain,application/json" hidden>
+          <button class="btn quiet" id="clear" type="button">Clear</button>
+          <button class="btn quiet" id="load-example" type="button">Load example</button>
+        </div>
+        <p class="status" id="read-status" aria-live="polite"></p>
+        <details id="skipped-wrap" hidden>
+          <summary id="skipped-summary"></summary>
+          <pre id="skipped-lines"></pre>
+        </details>
+        <details>
+          <summary>How do I get the comments?</summary>
+          <ol>
+            <li>On a computer, open the post on instagram.com and keep scrolling the comments until the last one is showing. Instagram loads them in batches.</li>
+            <li>Select from the first comment to the last, copy, and paste here. Usernames, likes, times and Reply links are sorted out for you.</li>
+            <li>For a post with hundreds of comments, a comment export tool is quicker. Drop its CSV or JSON file onto the box.</li>
+            <li>You can also type one comment per line with the username first, or paste a plain list of usernames.</li>
+          </ol>
+        </details>
+      </section>
+
+      <section class="panel" aria-labelledby="h-rules">
+        <div class="panel-head">
+          <span class="step">02</span>
+          <h2 id="h-rules">Rules</h2>
+        </div>
+        <div class="rules">
+          <fieldset class="field wide">
+            <legend>Entries per account</legend>
+            <div class="choices">
+              <label class="choice" for="mode-one">
+                <input type="radio" name="mode" id="mode-one" value="one">
+                <div><b>One entry per account</b><span>Extra comments from the same account are ignored.</span></div>
+              </label>
+              <label class="choice" for="mode-all">
+                <input type="radio" name="mode" id="mode-all" value="all">
+                <div><b>Every comment counts</b><span>More comments, more chances.</span></div>
+              </label>
+            </div>
+            <label class="check" for="dedupe-text" id="dedupe-wrap">
+              <input type="checkbox" id="dedupe-text"> Ignore word-for-word repeats from the same account
+            </label>
+          </fieldset>
+
+          <div class="field">
+            <label for="min-tags">Tagged friends required</label>
+            <div class="stepper">
+              <button class="btn" type="button" id="tags-down" aria-label="One fewer tag">−</button>
+              <input type="number" id="min-tags" min="0" max="20" step="1" inputmode="numeric">
+              <button class="btn" type="button" id="tags-up" aria-label="One more tag">+</button>
+            </div>
+            <p class="hint">Counts different @accounts in one comment. Tagging yourself or a left-out account doesn't count.</p>
+          </div>
+
+          <div class="field">
+            <label for="must-include">Comment must include</label>
+            <input type="text" id="must-include" placeholder="#giveaway, done" autocomplete="off">
+            <p class="hint">Separate with commas. A comment needs all of them. Capitals don't matter.</p>
+          </div>
+
+          <div class="field wide">
+            <label for="blocked">Leave out these accounts</label>
+            <input type="text" id="blocked" placeholder="yourbrand, partner.account" autocomplete="off" spellcheck="false">
+            <p class="hint">Your own account, staff, past winners. Add yours so the caption and your replies aren't entered.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-entries">
+        <div class="panel-head">
+          <h2 id="h-entries">Who's in</h2>
+          <div class="tabs" role="group" aria-label="Show">
+            <button type="button" data-view="all" aria-pressed="true">All</button>
+            <button type="button" data-view="in" aria-pressed="false">In</button>
+            <button type="button" data-view="out" aria-pressed="false">Left out</button>
+          </div>
+        </div>
+        <div class="tally" id="tally"></div>
+        <ul class="entries" id="entries"></ul>
+        <button class="btn quiet" id="show-all" type="button" hidden></button>
+      </section>
+    </div>
+
+    <aside class="stage" aria-labelledby="h-draw">
+      <div class="panel-head">
+        <span class="step">03</span>
+        <h2 id="h-draw">Draw</h2>
+      </div>
+
+      <div class="ticket" id="ticket">
+        <div class="stub"><span id="stub-left">Admit one winner</span><b id="serial">No. ----</b></div>
+        <div class="tear"></div>
+        <div class="face" id="face" aria-live="polite">
+          <span class="label" id="t-label"></span>
+          <span class="big" id="t-big"></span>
+          <span class="sub" id="t-sub"></span>
+          <span class="quote" id="t-quote"></span>
+          <span class="meta" id="t-meta"></span>
+        </div>
+      </div>
+
+      <button class="draw" id="draw" type="button">Draw the winner</button>
+      <p class="under" id="under"></p>
+
+      <div class="row" id="after" hidden>
+        <button class="btn" id="copy" type="button">Copy result</button>
+        <a class="btn" id="profile" target="_blank" rel="noopener">Open profile</a>
+        <button class="btn quiet" id="reset" type="button">Start over</button>
+      </div>
+
+      <div class="log" id="log" hidden>
+        <h3>Draw log</h3>
+        <ol id="log-list"></ol>
+        <label class="hint" for="record">Record of the latest draw, for your giveaway post or files.</label>
+        <textarea id="record" readonly></textarea>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<script>
+/* ===== LOGIC START ===== */
+const HANDLE = '[A-Za-z0-9._]{1,30}';
+const HANDLE_ONLY = new RegExp('^@?(' + HANDLE + ')$');
+const LINE_ENTRY = new RegExp('^@?(' + HANDLE + ')(?:\\s*[:|\\t,]\\s*|\\s+[-\\u2013\\u2014]\\s+|\\s+)([\\s\\S]*)$');
+const MENTION = new RegExp('@(' + HANDLE + ')', 'g');
+
+// Lines Instagram's web page adds around each comment.
+const END_OF_COMMENT = [
+  /^(reply|like|liked|see translation|see original|hide replies|hide all replies|load more comments|view more comments)$/i,
+  /^(\d+\s?(s|sec|m|min|h|hr|d|w|wk|mo|y|yr)s?|now|just now)$/i,
+  /^\d+\s(second|minute|hour|day|week|month|year)s?(\sago)?$/i,
+  /^[\d.,]+\s?[km]?\s(like|likes|reply|replies)$/i,
+  /^(view|hide|show)\s(all\s)?(\d+\s)?(more\s)?(reply|replies)(\s?\(\d+\))?$/i,
+  /^\d+\s?(s|m|h|d|w|y)\b.*\b(reply|likes?)$/i,
+  /^(edited\s*[·•]\s*)?\d+\s?(s|m|h|d|w|y)(\s*[·•]\s*edited)?$/i,
+  /by (the )?(author|creator)$/i,
+  /^[·•|\-–—\s]+$/
+];
+const DECORATION = [
+  /^(verified|pinned|author|creator|edited|follow|following)$/i,
+  /['’]s profile picture$/i,
+  /^profile picture of /i
+];
+const matchesAny = (list, s) => list.some(re => re.test(s));
+
+function cleanHandle(s){ return String(s).trim().replace(/^@/, '').replace(/\.+$/, ''); }
+
+function makeEntry(user, text, n){
+  const name = cleanHandle(user);
+  const key = name.toLowerCase();
+  const body = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
+  const mentions = [];
+  let m; MENTION.lastIndex = 0;
+  while ((m = MENTION.exec(body))) {
+    const h = cleanHandle(m[1]).toLowerCase();
+    if (h && h !== key && !mentions.includes(h)) mentions.push(h);
+  }
+  return { id: n, user: name, key, text: body, mentions };
+}
+
+function parseDelimited(text, delim){
+  const rows = []; let row = [], field = '', quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else quoted = false; }
+      else field += c;
+    } else if (c === '"' && field === '') quoted = true;
+    else if (c === delim) { row.push(field); field = ''; }
+    else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else if (c !== '\r') field += c;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(f => f.trim() !== ''));
+}
+
+const USER_COLS = ['username', 'ownerusername', 'userusername', 'handle', 'user', 'author', 'owner', 'account', 'profile', 'name'];
+const TEXT_COLS = ['text', 'comment', 'commenttext', 'message', 'content', 'body'];
+function pickColumn(headers, keys){
+  const norm = headers.map(h => h.toLowerCase().replace(/[^a-z]/g, ''));
+  for (const k of keys) { const i = norm.indexOf(k); if (i > -1) return i; }
+  const side = /(id|url|link|pic|picture|date|time|count|likes|at)$/;
+  for (const k of keys) { const i = norm.findIndex(h => h.includes(k) && !side.test(h)); if (i > -1) return i; }
+  return -1;
+}
+
+function fromJSON(value){
+  const out = [];
+  const visit = node => {
+    if (Array.isArray(node)) { node.forEach(visit); return; }
+    if (!node || typeof node !== 'object') return;
+    const user = node.username ?? node.ownerUsername ?? (node.owner && node.owner.username) ??
+      (node.user && node.user.username) ?? (node.from && node.from.username) ?? node.author;
+    const text = node.text ?? node.comment ?? node.message ?? node.content;
+    if (typeof user === 'string' && typeof text === 'string') {
+      out.push([user, text]);
+      for (const k of ['replies', 'childComments', 'children']) if (node[k]) visit(node[k].data ?? node[k]);
+      return;
+    }
+    for (const k in node) if (node[k] && typeof node[k] === 'object') visit(node[k]);
+  };
+  visit(value);
+  return out;
+}
+
+function fromInstagramCopy(lines){
+  const blocks = []; let cur = [];
+  for (const line of lines) {
+    if (matchesAny(DECORATION, line)) continue;
+    if (matchesAny(END_OF_COMMENT, line)) { if (cur.length) { blocks.push(cur); cur = []; } continue; }
+    cur.push(line);
+  }
+  if (cur.length) blocks.push(cur);
+  const pairs = [], skipped = [];
+  const lone = blocks.filter(b => b.length === 1 && HANDLE_ONLY.test(b[0])).length;
+  const stacked = blocks.length > 1 && lone >= blocks.length * 0.4; // username and text sit in separate blocks
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    if (stacked && b.length === 1 && HANDLE_ONLY.test(b[0]) && blocks[i + 1]) { pairs.push([b[0], blocks[++i].join(' ')]); continue; }
+    if (b.length >= 2 && HANDLE_ONLY.test(b[0])) { pairs.push([b[0], b.slice(1).join(' ')]); continue; }
+    const m = b.length === 1 && !HANDLE_ONLY.test(b[0]) ? LINE_ENTRY.exec(b[0]) : null;
+    if (m) { pairs.push([m[1], m[2]]); continue; }
+    skipped.push(b.join(' / '));
+  }
+  return { pairs, skipped };
+}
+
+function fromLines(lines){
+  const pairs = [], skipped = [];
+  for (const line of lines) {
+    const m = LINE_ENTRY.exec(line);
+    if (m) pairs.push([m[1], m[2]]);
+    else if (HANDLE_ONLY.test(line)) pairs.push([line, '']);
+    else skipped.push(line);
+  }
+  return { pairs, skipped };
+}
+
+function parseComments(raw){
+  const text = String(raw || '').replace(/^﻿/, '');
+  const finish = (pairs, skipped, format) => {
+    const entries = [];
+    for (const [u, t] of pairs) {
+      const h = cleanHandle(u);
+      if (HANDLE_ONLY.test(h)) entries.push(makeEntry(h, t, entries.length));
+      else skipped.push(String(u) + ' ' + String(t));
+    }
+    return { entries, skipped, format };
+  };
+  const trimmed = text.trim();
+  if (!trimmed) return { entries: [], skipped: [], format: '' };
+
+  if (/^[\[{]/.test(trimmed)) {
+    try { const pairs = fromJSON(JSON.parse(trimmed)); if (pairs.length) return finish(pairs, [], 'JSON export'); } catch (e) {}
+  }
+
+  const firstLine = trimmed.split('\n', 1)[0];
+  const delim = [',', '\t', ';'].map(d => [d, firstLine.split(d).length]).sort((a, b) => b[1] - a[1])[0];
+  if (delim[1] >= 2) {
+    const rows = parseDelimited(trimmed, delim[0]);
+    const u = pickColumn(rows[0], USER_COLS), t = pickColumn(rows[0], TEXT_COLS);
+    if (u > -1 && t > -1 && u !== t) {
+      return finish(rows.slice(1).map(r => [r[u] || '', r[t] || '']), [], 'spreadsheet export');
+    }
+    if (delim[0] === '\t' && rows.every(r => r.length >= 2) && HANDLE_ONLY.test(rows[0][0].trim())) {
+      return finish(rows.map(r => [r[0], r.slice(1).join(' ')]), [], 'two columns');
+    }
+  }
+
+  const lines = trimmed.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const markers = lines.filter(l => matchesAny(END_OF_COMMENT, l)).length;
+  if (markers >= 2 && markers >= lines.length * 0.12) {
+    const r = fromInstagramCopy(lines);
+    return finish(r.pairs, r.skipped, 'copied from Instagram');
+  }
+  const r = fromLines(lines);
+  return finish(r.pairs, r.skipped, 'one per line');
+}
+
+function splitList(s){ return String(s || '').split(/[,\n]+/).map(x => x.trim()).filter(Boolean); }
+
+function compileRules(r){
+  return {
+    mode: r.mode === 'all' ? 'all' : 'one',
+    dedupeText: !!r.dedupeText,
+    minTags: Math.max(0, Math.min(20, parseInt(r.minTags, 10) || 0)),
+    needs: splitList(r.mustInclude).map(s => s.toLowerCase()),
+    blocked: new Set(String(r.blocked || '').split(/[\s,;]+/).map(s => cleanHandle(s).toLowerCase()).filter(Boolean))
+  };
+}
+
+// Returns every entry with reason = null (in the draw) or a short label saying why it is left out.
+function evaluate(entries, rules, drawn){
+  const seenAccount = new Set(), seenComment = new Set();
+  return entries.map(e => {
+    let reason = null;
+    const tags = e.mentions.filter(h => !rules.blocked.has(h)).length;
+    const lower = e.text.toLowerCase();
+    const missing = rules.needs.find(w => !lower.includes(w));
+    if (drawn && drawn.has(e.key)) reason = 'Already drawn';
+    else if (rules.blocked.has(e.key)) reason = 'Left-out account';
+    else if (tags < rules.minTags) reason = rules.minTags === 1 ? 'No friend tagged' : 'Under ' + rules.minTags + ' tags';
+    else if (missing) reason = 'Missing ' + missing;
+    else if (rules.mode === 'one') {
+      if (seenAccount.has(e.key)) reason = 'Duplicate account'; else seenAccount.add(e.key);
+    } else if (rules.dedupeText) {
+      const k = e.key + '\u0000' + lower;
+      if (seenComment.has(k)) reason = 'Repeated comment'; else seenComment.add(k);
+    }
+    return Object.assign({}, e, { reason });
+  });
+}
+
+// Uniform pick from 0..n-1 using the browser's cryptographic generator, with rejection sampling (no modulo bias).
+function randomIndex(n, source){
+  const span = 0x100000000, limit = span - (span % n), buf = new Uint32Array(1);
+  let x;
+  do { (source || crypto).getRandomValues(buf); x = buf[0]; } while (x >= limit);
+  return x % n;
+}
+
+function describeRules(r, c){
+  const parts = [c.mode === 'one' ? 'one entry per account' : 'every comment counts' + (c.dedupeText ? ' (word-for-word repeats ignored)' : '')];
+  if (c.minTags) parts.push('at least ' + c.minTags + ' tagged friend' + (c.minTags > 1 ? 's' : ''));
+  if (c.needs.length) parts.push('must include ' + c.needs.map(w => '"' + w + '"').join(' and '));
+  if (c.blocked.size) parts.push('left out: ' + [...c.blocked].map(h => '@' + h).join(', '));
+  return parts.join('; ');
+}
+/* ===== LOGIC END ===== */
+
+const EXAMPLE = [
+  '@kiri.bakes Yes please! @mel_tane @sam.wgtn #giveaway',
+  '@mel_tane In it to win it @kiri.bakes @jono_rides #giveaway',
+  '@jono_rides Would love this @ana.p @tui.designs',
+  '@kiri.bakes Entering again just in case @ruby.k @ollie_nz #giveaway',
+  '@ana.p Done! @tui.designs @harriet.m #giveaway',
+  '@thebrand.co Good luck everyone!',
+  '@tui.designs 🙌🙌🙌',
+  '@harriet.m Fingers crossed @ana.p @mel_tane #giveaway',
+  '@ollie_nz @ruby.k @sam.wgtn you two need this #giveaway',
+  '@ruby.k Amazing prize @ollie_nz',
+  '@sam.wgtn Yes!! @kiri.bakes @harriet.m #giveaway',
+  '@ana.p Done! @tui.designs @harriet.m #giveaway',
+  '@pete.runs Count me in @jono_rides @ana.p #giveaway',
+  '@wai_ceramics So good @pete.runs @ruby.k #giveaway'
+].join('\n');
+
+const DEFAULT_RULES = { mode: 'one', dedupeText: true, minTags: 0, mustInclude: '', blocked: '' };
+const STORE_KEY = 'ig-randomizer.rules';
+const $ = id => document.getElementById(id);
+const plural = (n, one, many) => n.toLocaleString() + ' ' + (n === 1 ? one : (many || one + 's'));
+const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const state = { text: EXAMPLE, rules: Object.assign({}, DEFAULT_RULES), log: [], view: 'all', showAll: false, rolling: false };
+let parsed = { entries: [], skipped: [], format: '' };
+let judged = [];
+let pool = [];
+
+function loadRules(){ try { return JSON.parse(localStorage.getItem(STORE_KEY)) || null; } catch (e) { return null; } }
+function saveRules(){ try { localStorage.setItem(STORE_KEY, JSON.stringify(state.rules)); } catch (e) {} }
+
+function recompute(){
+  parsed = parseComments(state.text);
+  const drawn = new Set(state.log.map(d => d.key));
+  judged = evaluate(parsed.entries, compileRules(state.rules), drawn);
+  pool = judged.filter(e => !e.reason);
+  render();
+}
+
+function render(){ renderSource(); renderEntries(); renderTicket(); renderLog(); }
+
+function renderSource(){
+  const isExample = state.text === EXAMPLE;
+  $('example-badge').hidden = !isExample;
+  const n = parsed.entries.length;
+  const status = $('read-status');
+  status.textContent = '';
+  if (!state.text.trim()) status.textContent = 'No comments yet.';
+  else if (!n) status.textContent = 'No comments could be read from that. Each one needs a username.';
+  else {
+    const accounts = new Set(parsed.entries.map(e => e.key)).size;
+    status.append('Read ' + plural(n, 'comment') + ' from ' + plural(accounts, 'account') + ' ');
+    const small = document.createElement('small');
+    small.textContent = '· ' + parsed.format;
+    status.append(small);
+  }
+  const wrap = $('skipped-wrap');
+  wrap.hidden = !parsed.skipped.length;
+  if (parsed.skipped.length) {
+    $('skipped-summary').textContent = plural(parsed.skipped.length, 'line') + " couldn't be read as a comment";
+    $('skipped-lines').textContent = parsed.skipped.slice(0, 200).join('\n');
+  }
+}
+
+function renderEntries(){
+  const tally = $('tally'); tally.textContent = '';
+  const out = judged.filter(e => e.reason);
+  const addPill = (cls, text) => { const s = document.createElement('span'); s.className = 'pill ' + cls; s.textContent = text; tally.append(s); };
+  addPill('in', pool.length.toLocaleString() + ' in the draw');
+  const reasons = new Map();
+  out.forEach(e => reasons.set(e.reason, (reasons.get(e.reason) || 0) + 1));
+  [...reasons].sort((a, b) => b[1] - a[1]).forEach(([r, c]) => addPill('out', c.toLocaleString() + ' × ' + r.toLowerCase()));
+
+  const rows = state.view === 'in' ? pool : state.view === 'out' ? out : judged;
+  const list = $('entries'); list.textContent = '';
+  const LIMIT = 300;
+  const shown = state.showAll ? rows : rows.slice(0, LIMIT);
+  if (!rows.length) {
+    const li = document.createElement('li'); li.style.display = 'block';
+    const s = document.createElement('span'); s.className = 'none';
+    s.textContent = state.view === 'out' ? 'Nobody is left out.' : 'Nobody here yet. Paste comments above or loosen the rules.';
+    li.append(s); list.append(li);
+  }
+  const frag = document.createDocumentFragment();
+  for (const e of shown) {
+    const li = document.createElement('li'); if (e.reason) li.className = 'is-out';
+    const who = document.createElement('span'); who.className = 'who'; who.textContent = '@' + e.user;
+    const said = document.createElement('span'); said.className = 'said'; said.textContent = e.text || '(no text)';
+    const pill = document.createElement('span'); pill.className = 'pill ' + (e.reason ? 'out' : 'in'); pill.textContent = e.reason || 'In';
+    li.append(who, said, pill); frag.append(li);
+  }
+  list.append(frag);
+  const more = $('show-all');
+  more.hidden = state.showAll || rows.length <= LIMIT;
+  more.textContent = 'Show all ' + rows.length.toLocaleString();
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === state.view)));
+}
+
+function sizeFor(s){ const n = s.length; return n <= 10 ? '76px' : n <= 15 ? '54px' : n <= 21 ? '40px' : '30px'; }
+function setFace(label, big, sub, quote, meta){
+  $('t-label').textContent = label;
+  const b = $('t-big'); b.textContent = big; b.style.setProperty('--big', sizeFor(big));
+  $('t-sub').textContent = sub; $('t-quote').textContent = quote; $('t-meta').textContent = meta;
+  ['t-sub', 't-quote', 't-meta'].forEach(id => { $(id).hidden = !$(id).textContent; });
+}
+
+function renderTicket(){
+  if (state.rolling) return;
+  const ticket = $('ticket'); ticket.classList.remove('is-rolling');
+  const last = state.log[state.log.length - 1];
+  const total = parsed.entries.length;
+  $('stub-left').textContent = state.text === EXAMPLE ? 'Example draw' : 'Admit one winner';
+  if (last) {
+    $('serial').textContent = 'No. ' + String(last.ticket).padStart(4, '0');
+    setFace(state.log.length > 1 ? 'Replacement winner' : 'Winner', '@' + last.user,
+      '', last.text ? '“' + last.text + '”' : '',
+      'Ticket ' + last.ticket.toLocaleString() + ' of ' + last.pool.toLocaleString() + ' · ' + last.when);
+  } else {
+    $('serial').textContent = 'No. ----';
+    if (pool.length) setFace('Ready to draw', pool.length.toLocaleString(),
+      pool.length === 1 ? 'entry in the draw' : 'entries in the draw', '',
+      'From ' + plural(total, 'comment') + ' · each has a 1 in ' + pool.length.toLocaleString() + ' chance');
+    else setFace('Nothing to draw', '0', total ? 'No comment passes the rules. Loosen one to continue.' : 'Paste comments to begin.', '', '');
+  }
+  const btn = $('draw');
+  btn.disabled = !pool.length;
+  btn.textContent = last ? 'Draw a replacement' : 'Draw the winner';
+  $('under').textContent = last
+    ? (pool.length ? '@' + last.user + ' is out of the next draw. ' + plural(pool.length, 'entry', 'entries') + ' left.' : 'Nobody is left to draw.')
+    : 'The pick uses your browser’s cryptographic random number generator, so every entry has the same chance.';
+  $('after').hidden = !last;
+  if (last) $('profile').href = 'https://www.instagram.com/' + encodeURIComponent(last.user) + '/';
+}
+
+function recordText(){
+  const last = state.log[state.log.length - 1]; if (!last) return '';
+  const lines = ['IG Randomizer draw', 'Winner: @' + last.user];
+  if (last.text) lines.push('Comment: "' + last.text + '"');
+  lines.push('Drawn: ' + last.when,
+    'Pool: ' + plural(last.pool, 'eligible entry', 'eligible entries') + ' from ' + plural(last.total, 'comment') + ' (ticket ' + last.ticket + ' of ' + last.pool + ')',
+    'Rules: ' + last.rules);
+  if (state.log.length > 1) lines.push('Replacement draw ' + state.log.length + '. Drawn earlier: ' + state.log.slice(0, -1).map(d => '@' + d.user).join(', '));
+  lines.push('Picked with the browser’s cryptographic random number generator.');
+  return lines.join('\n');
+}
+
+function renderLog(){
+  $('log').hidden = !state.log.length;
+  const ol = $('log-list'); ol.textContent = '';
+  state.log.forEach((d, i) => {
+    const li = document.createElement('li');
+    const b = document.createElement('b'); b.textContent = (i + 1) + '. @' + d.user;
+    const s = document.createElement('span'); s.textContent = 'ticket ' + d.ticket + ' of ' + d.pool + ' · ' + d.when;
+    li.append(b, s); ol.append(li);
+  });
+  $('record').value = recordText();
+}
+
+function draw(){
+  if (state.rolling || !pool.length) return;
+  const snapshot = pool.slice();
+  const index = randomIndex(snapshot.length);
+  const winner = snapshot[index];
+  const finish = () => {
+    state.log.push({
+      user: winner.user, key: winner.key, text: winner.text, ticket: index + 1, pool: snapshot.length, total: parsed.entries.length,
+      when: new Date().toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }),
+      rules: describeRules(state.rules, compileRules(state.rules))
+    });
+    state.rolling = false;
+    setControlsLocked(false);
+    recompute();
+    const t = $('ticket'); t.classList.remove('is-won'); void t.offsetWidth; t.classList.add('is-won');
+  };
+  if (reducedMotion || snapshot.length === 1) { finish(); return; }
+  state.rolling = true;
+  setControlsLocked(true);
+  $('ticket').classList.remove('is-won'); $('ticket').classList.add('is-rolling');
+  $('serial').textContent = 'No. ----';
+  const frames = 24; let i = 0;
+  const tick = () => {
+    if (i >= frames) { finish(); return; }
+    const p = snapshot[Math.floor(Math.random() * snapshot.length)];
+    setFace('Drawing', '@' + p.user, '', '', '');
+    i++; const t = i / frames;
+    setTimeout(tick, 45 + 250 * t * t * t);
+  };
+  tick();
+}
+
+function setControlsLocked(on){
+  document.querySelectorAll('.paperwork input, .paperwork textarea, .paperwork button, #draw, #reset, #copy').forEach(el => { el.disabled = on; });
+  if (!on) $('draw').disabled = !pool.length;
+}
+
+function setText(text){
+  state.text = text; state.log = []; state.showAll = false;
+  if ($('comments').value !== text) $('comments').value = text;
+  recompute();
+}
+
+function readFile(file){
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => setText(String(reader.result || ''));
+  reader.onerror = () => { $('read-status').textContent = 'That file could not be opened. Try saving it as CSV and choosing it again.'; };
+  reader.readAsText(file);
+}
+
+function syncRuleInputs(){
+  const r = state.rules;
+  $('mode-one').checked = r.mode !== 'all'; $('mode-all').checked = r.mode === 'all';
+  $('dedupe-text').checked = !!r.dedupeText; $('dedupe-wrap').hidden = r.mode !== 'all';
+  $('min-tags').value = r.minTags; $('must-include').value = r.mustInclude; $('blocked').value = r.blocked;
+}
+function rulesChanged(){ state.showAll = false; syncRuleInputs(); saveRules(); recompute(); }
+
+function start(saved){
+  const stored = loadRules();
+  state.rules = Object.assign({}, DEFAULT_RULES, stored || {}, (saved && saved.rules) || {});
+  state.text = saved && typeof saved.text === 'string' ? saved.text : EXAMPLE;
+  state.log = saved && Array.isArray(saved.log) ? saved.log : [];
+  $('comments').value = state.text;
+  syncRuleInputs();
+
+  let timer;
+  $('comments').addEventListener('input', e => { clearTimeout(timer); const v = e.target.value; timer = setTimeout(() => setText(v), 160); });
+  $('file').addEventListener('change', e => { readFile(e.target.files[0]); e.target.value = ''; });
+  const box = $('comments');
+  box.addEventListener('dragover', e => { e.preventDefault(); box.classList.add('dragging'); });
+  box.addEventListener('dragleave', () => box.classList.remove('dragging'));
+  box.addEventListener('drop', e => {
+    box.classList.remove('dragging');
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) { e.preventDefault(); readFile(f); }
+  });
+  $('clear').addEventListener('click', () => { setText(''); $('comments').focus(); });
+  $('load-example').addEventListener('click', () => setText(EXAMPLE));
+
+  document.querySelectorAll('input[name="mode"]').forEach(el => el.addEventListener('change', () => { state.rules.mode = el.value; rulesChanged(); }));
+  $('dedupe-text').addEventListener('change', e => { state.rules.dedupeText = e.target.checked; rulesChanged(); });
+  const setTags = n => { state.rules.minTags = Math.max(0, Math.min(20, n || 0)); rulesChanged(); };
+  $('min-tags').addEventListener('change', e => setTags(parseInt(e.target.value, 10)));
+  $('tags-down').addEventListener('click', () => setTags(state.rules.minTags - 1));
+  $('tags-up').addEventListener('click', () => setTags(state.rules.minTags + 1));
+  let ruleTimer;
+  const typed = (id, key) => $(id).addEventListener('input', e => {
+    state.rules[key] = e.target.value; clearTimeout(ruleTimer);
+    ruleTimer = setTimeout(() => { state.showAll = false; saveRules(); recompute(); }, 160);
+  });
+  typed('must-include', 'mustInclude'); typed('blocked', 'blocked');
+
+  document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { state.view = b.dataset.view; state.showAll = false; renderEntries(); }));
+  $('show-all').addEventListener('click', () => { state.showAll = true; renderEntries(); });
+
+  $('draw').addEventListener('click', draw);
+  $('reset').addEventListener('click', () => { state.log = []; $('ticket').classList.remove('is-won'); recompute(); });
+  $('copy').addEventListener('click', async () => {
+    const btn = $('copy'), text = recordText(); let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; }
+    catch (e) { try { $('record').focus(); $('record').select(); ok = document.execCommand('copy'); } catch (e2) {} }
+    btn.textContent = ok ? 'Copied' : 'Select the record below and copy it';
+    setTimeout(() => { btn.textContent = 'Copy result'; }, 2200);
+  });
+
+  recompute();
+}
+
+if (typeof document !== 'undefined') {
+  const hot = window.claude && window.claude.hot;
+  if (hot && hot.snapshot) hot.snapshot(() => ({ text: state.text, rules: state.rules, log: state.log }));
+  if (hot && hot.ready) hot.ready(start); else start((hot && hot.data) || {});
+  // Offline support for the installed home-screen app. Only on its own web address, never inside another viewer.
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && window.top === window && /\.github\.io$/.test(location.hostname)) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+}
+</script>
+</body>
+</html>
