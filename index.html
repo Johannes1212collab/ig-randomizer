@@ -266,6 +266,7 @@ fieldset legend{padding:0; margin-bottom:6px}
             </div>
           </div>
           <div id="ig-fetch" hidden>
+            <p class="hint" id="ig-saved">Saved on this device. Next time it connects by itself.</p>
             <select id="ig-account" aria-label="Instagram account" hidden></select>
             <label class="hint" for="ig-link">Paste a link to one of your posts, or pick a recent one below.</label>
             <div class="row">
@@ -977,6 +978,10 @@ function setFetched(pairs, label){
 /* ----- Instagram connection UI ----- */
 function igLoad(){ try { const v = JSON.parse(localStorage.getItem(IG_KEY)); return v && v.token && Array.isArray(v.accounts) && v.accounts.length ? v : null; } catch (e) { return null; } }
 function igSave(){ try { if (ig) localStorage.setItem(IG_KEY, JSON.stringify(ig)); else localStorage.removeItem(IG_KEY); } catch (e) {} }
+// Ask the browser not to clear the saved connection when it tidies up storage.
+async function igPersist(){
+  try { if (navigator.storage && navigator.storage.persist && !(await navigator.storage.persisted())) await navigator.storage.persist(); } catch (e) {}
+}
 function igConn(){ const a = ig.accounts[ig.active] || ig.accounts[0]; return { host: ig.host, token: ig.token, id: a.id, username: a.username }; }
 function igSay(text, isError){ const s = $('ig-status'); s.hidden = !text; s.textContent = text || ''; s.classList.toggle('is-error', !!isError); }
 function igSetBusy(on){
@@ -1003,7 +1008,7 @@ async function igConnect(){
     const found = await igDiscover(token);
     if (found.accounts.length) {
       ig = { token, host: found.host, accounts: found.accounts, active: 0 }; igPending = null;
-      igSave(); $('ig-token').value = ''; igSay(''); igRender(); await igLoadRecent();
+      igSave(); igPersist(); $('ig-token').value = ''; igSay(''); igRender(); await igLoadRecent();
     } else {
       igPending = { token, host: found.host }; $('ig-manual').hidden = false; igShowNotes(found.notes);
       igSay('Connected to Instagram, but the token did not list an account. Enter the account ID below.', true);
@@ -1020,7 +1025,7 @@ async function igUseManualId(){
     const a = await igGet(igPending.host, id, { fields: 'id,username' }, igPending.token);
     if (!a.username) throw Object.assign(new Error('That ID is not an Instagram account this token can read.'), { kind: 'graph' });
     ig = { token: igPending.token, host: igPending.host, accounts: [{ id, username: a.username }], active: 0 }; igPending = null;
-    igSave(); $('ig-token').value = ''; $('ig-account-id').value = ''; igShowNotes(null); igSay(''); igRender(); await igLoadRecent();
+    igSave(); igPersist(); $('ig-token').value = ''; $('ig-account-id').value = ''; igShowNotes(null); igSay(''); igRender(); await igLoadRecent();
   } catch (e) { igSay(igErrorText(e), true); }
   igSetBusy(false);
 }
@@ -1134,7 +1139,7 @@ function start(saved){
   $('ig-get').addEventListener('click', igGetFromLink);
   $('ig-link').addEventListener('keydown', e => { if (e.key === 'Enter') igGetFromLink(); });
   $('ig-account').addEventListener('change', e => { ig.active = parseInt(e.target.value, 10) || 0; igSave(); igRender(); igLoadRecent(); });
-  ig = igLoad(); igRender(); if (ig) igLoadRecent();
+  ig = igLoad(); igRender(); if (ig) { igPersist(); igLoadRecent(); }
 
   $('draw').addEventListener('click', draw);
   $('reset').addEventListener('click', () => { state.log = []; $('ticket').classList.remove('is-won'); recompute(); });
