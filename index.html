@@ -112,6 +112,25 @@ details ol{margin:8px 0 0; padding-left:20px; color:var(--muted); display:flex; 
 details pre{margin:8px 0 0; padding:10px 12px; background:var(--paper); border-radius:9px; overflow-x:auto;
   font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--muted); max-height:140px}
 
+/* Instagram connection */
+.ig{background:var(--paper); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:10px}
+.ig-head{display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px}
+.ig-head b{font-size:var(--fs-s)}
+.ig-head .pill{margin-right:auto}
+.ig .row input{flex:1 1 200px; min-width:0; background:var(--surface)}
+.ig select{background:var(--surface); border:1.5px solid var(--line); border-radius:9px; padding:8px 10px; max-width:100%}
+.posts{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; max-height:232px; overflow-y:auto}
+.post{appearance:none; width:100%; text-align:left; cursor:pointer; background:var(--surface); border:1.5px solid var(--line);
+  border-radius:9px; padding:8px 12px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:2px 12px; font-size:var(--fs-s)}
+.post:hover{border-color:var(--ink)}
+.post[disabled]{opacity:.5; cursor:not-allowed}
+.post .cap{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600}
+.post .when{grid-column:1; color:var(--muted); font-size:var(--fs-xs); font-family:var(--font-mono)}
+.post .count{grid-row:1 / span 2; grid-column:2; align-self:center; font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--muted); white-space:nowrap}
+.ig .status.is-error{color:var(--out)}
+.or{display:flex; align-items:center; gap:10px; color:var(--muted); font-size:var(--fs-xs); font-family:var(--font-mono); text-transform:uppercase; letter-spacing:.08em}
+.or::before,.or::after{content:""; flex:1; border-top:1px solid var(--line)}
+
 /* Rules */
 .rules{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px 20px}
 .field{display:flex; flex-direction:column; gap:6px; min-width:0}
@@ -226,6 +245,42 @@ fieldset legend{padding:0; margin-bottom:6px}
           <h2 id="h-comments">Comments</h2>
           <span class="badge" id="example-badge">Example comments</span>
         </div>
+        <div class="ig" id="ig">
+          <div class="ig-head">
+            <b>From your Instagram</b>
+            <span class="pill in" id="ig-state" hidden></span>
+            <button class="btn quiet" id="ig-disconnect" type="button" hidden>Disconnect</button>
+          </div>
+          <div id="ig-connect">
+            <label class="hint" for="ig-token">Paste the access token from your Meta app to pull comments straight from your posts. It is kept only in this browser and sent only to Instagram.</label>
+            <div class="row">
+              <input type="password" id="ig-token" placeholder="Access token" autocomplete="off" autocapitalize="off" spellcheck="false">
+              <button class="btn" id="ig-connect-btn" type="button">Connect</button>
+            </div>
+            <div id="ig-manual" hidden>
+              <label class="hint" for="ig-account-id">The token works but didn't say which Instagram account it belongs to. Enter the account ID: the long number shown beside your account under Generate access tokens in the Meta app.</label>
+              <div class="row">
+                <input type="text" id="ig-account-id" placeholder="Instagram account ID" inputmode="numeric" autocomplete="off">
+                <button class="btn" id="ig-manual-btn" type="button">Use this ID</button>
+              </div>
+            </div>
+          </div>
+          <div id="ig-fetch" hidden>
+            <select id="ig-account" aria-label="Instagram account" hidden></select>
+            <label class="hint" for="ig-link">Paste a link to one of your posts, or pick a recent one below.</label>
+            <div class="row">
+              <input type="text" id="ig-link" placeholder="https://www.instagram.com/p/..." inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false">
+              <button class="btn" id="ig-get" type="button">Get comments</button>
+            </div>
+            <ul class="posts" id="ig-posts"></ul>
+          </div>
+          <p class="status" id="ig-status" aria-live="polite" hidden></p>
+          <details id="ig-diag-wrap" hidden>
+            <summary>What Instagram replied</summary>
+            <pre id="ig-diag"></pre>
+          </details>
+        </div>
+        <div class="or">or bring them yourself</div>
         <label class="hint" for="comments">Paste the post's comments, or drop a CSV or JSON export onto the box.</label>
         <textarea id="comments" spellcheck="false" autocomplete="off"></textarea>
         <div class="row">
@@ -242,7 +297,8 @@ fieldset legend{padding:0; margin-bottom:6px}
         <details>
           <summary>How do I get the comments?</summary>
           <ol>
-            <li>On a computer, open the post on instagram.com and keep scrolling the comments until the last one is showing. Instagram loads them in batches.</li>
+            <li>Easiest: connect your Instagram above, then paste a post link or pick a recent post. This works for posts on your own Business or Creator account.</li>
+            <li>Without connecting: on a computer, open the post on instagram.com and keep scrolling the comments until the last one is showing. Instagram loads them in batches.</li>
             <li>Select from the first comment to the last, copy, and paste here. Usernames, likes, times and Reply links are sorted out for you.</li>
             <li>For a post with hundreds of comments, a comment export tool is quicker. Drop its CSV or JSON file onto the box.</li>
             <li>You can also type one comment per line with the username first, or paste a plain list of usernames.</li>
@@ -509,6 +565,148 @@ function parseComments(raw){
   return finish(r.pairs, r.skipped, 'one per line');
 }
 
+function entriesFromPairs(pairs){
+  const entries = [], skipped = [];
+  for (const [u, t] of pairs) {
+    const h = cleanHandle(u);
+    if (HANDLE_ONLY.test(h)) entries.push(makeEntry(h, t, entries.length));
+    else skipped.push(String(u) + ' ' + String(t));
+  }
+  return { entries, skipped };
+}
+
+/* ----- Instagram API (read-only). The token goes to Instagram's own API hosts and nowhere else. ----- */
+function igHost(token){ return /^IG/i.test(String(token).trim()) ? 'https://graph.instagram.com' : 'https://graph.facebook.com'; }
+
+function igUrl(host, path, params, token){
+  const url = new URL(host + '/' + String(path).replace(/^\/+/, ''));
+  for (const k in params) url.searchParams.set(k, params[k]);
+  url.searchParams.set('access_token', token);
+  return url.toString();
+}
+
+async function igGetUrl(url, fetchFn){
+  let res;
+  try { res = await (fetchFn || fetch)(url, { method: 'GET', cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' }); }
+  catch (e) { const err = new Error('network'); err.kind = 'network'; throw err; }
+  let body = null;
+  try { body = await res.json(); } catch (e) {}
+  if (!res.ok || (body && body.error)) {
+    const g = (body && body.error) || {};
+    const err = new Error(g.message || ('HTTP ' + res.status));
+    err.kind = 'graph'; err.code = g.code; err.status = res.status;
+    throw err;
+  }
+  return body || {};
+}
+const igGet = (host, path, params, token, fetchFn) => igGetUrl(igUrl(host, path, params, token), fetchFn);
+
+// Only follow "next page" links that stay on the same Instagram host.
+function igNext(body, host){
+  const next = body && body.paging && body.paging.next;
+  if (typeof next !== 'string') return null;
+  try { return new URL(next).origin === new URL(host).origin ? next : null; } catch (e) { return null; }
+}
+
+function igErrorText(e){
+  if (!e || e.kind === 'network') return 'Could not reach Instagram. Check your connection and try again.';
+  if (e.code === 190) return 'Instagram says this token is no longer valid. Disconnect, then paste a new one.';
+  if (e.code === 10 || e.code === 200 || e.code === 3) return 'The token is missing a permission. In your Meta app configuration, keep instagram_basic and instagram_manage_comments, then generate a new token.';
+  if ([4, 17, 32, 613].includes(e.code)) return 'Instagram is limiting requests right now. Wait a few minutes and try again.';
+  return 'Instagram replied: ' + String(e.message || 'unknown error').slice(0, 220);
+}
+
+// Works out which Instagram account(s) a token can read. Tries each known route and keeps notes for troubleshooting.
+async function igDiscover(token, fetchFn){
+  const host = igHost(token), notes = [], found = new Map();
+  const add = (id, username) => { const k = String(id || ''); if (/^\d+$/.test(k)) found.set(k, username || found.get(k) || ''); };
+  const attempt = async (name, fn) => {
+    try { notes.push(name + ': ' + (await fn())); }
+    catch (e) { notes.push(name + ': ' + (e.kind === 'network' ? 'no reply' : '(' + (e.code || e.status || '?') + ') ' + String(e.message).slice(0, 160))); if (e.kind === 'network' || e.code === 190) throw e; }
+  };
+  const before = () => found.size;
+  if (host.includes('instagram.com')) {
+    await attempt('me', async () => { const me = await igGet(host, 'me', { fields: 'user_id,username' }, token, fetchFn); add(me.user_id || me.id, me.username); return 'ok'; });
+  } else {
+    await attempt('token details', async () => {
+      const n = before();
+      const d = (await igGet(host, 'debug_token', { input_token: token }, token, fetchFn)).data || {};
+      for (const g of d.granular_scopes || []) if (/^instagram/.test(g.scope || '')) for (const id of g.target_ids || []) add(id);
+      return (found.size - n) + ' account id(s)';
+    });
+    await attempt('pages', async () => {
+      const n = before();
+      const r = await igGet(host, 'me/accounts', { fields: 'instagram_business_account{id,username}', limit: 100 }, token, fetchFn);
+      for (const p of r.data || []) if (p.instagram_business_account) add(p.instagram_business_account.id, p.instagram_business_account.username);
+      return (found.size - n) + ' new';
+    });
+    if (!found.size) await attempt('me', async () => {
+      const r = await igGet(host, 'me', { fields: 'instagram_business_account{id,username}' }, token, fetchFn);
+      if (r.instagram_business_account) add(r.instagram_business_account.id, r.instagram_business_account.username);
+      return found.size ? 'ok' : 'none';
+    });
+    if (!found.size) await attempt('assigned accounts', async () => {
+      const r = await igGet(host, 'me/assigned_instagram_accounts', { fields: 'id,username', limit: 100 }, token, fetchFn);
+      for (const a of r.data || []) add(a.id, a.username);
+      return found.size ? 'ok' : 'none';
+    });
+    if (!found.size) await attempt('business accounts', async () => {
+      const r = await igGet(host, 'me/businesses', { fields: 'instagram_business_accounts{id,username}', limit: 50 }, token, fetchFn);
+      for (const b of r.data || []) for (const a of ((b.instagram_business_accounts || {}).data || [])) add(a.id, a.username);
+      return found.size ? 'ok' : 'none';
+    });
+  }
+  const accounts = [];
+  for (const [id, username] of found) {
+    if (username) { accounts.push({ id, username }); continue; }
+    try { const a = await igGet(host, id, { fields: 'id,username' }, token, fetchFn); if (a.username) accounts.push({ id, username: a.username }); }
+    catch (e) { notes.push('account ' + id.slice(0, 4) + '...: (' + (e.code || '?') + ') ' + String(e.message).slice(0, 120)); }
+  }
+  return { host, accounts, notes };
+}
+
+function igShortcode(link){
+  const m = /(?:\/|^)(?:p|reels?|tv)\/([A-Za-z0-9_-]{5,})/.exec(String(link || '').trim());
+  return m ? m[1] : null;
+}
+
+// Lists the account's posts, newest first. stopAt(post) can end the walk early.
+async function igListMedia(conn, fetchFn, opts){
+  const o = Object.assign({ limit: 25, maxPages: 1, stopAt: null }, opts || {});
+  const fields = ['id,shortcode,permalink,caption,comments_count,timestamp,media_type', 'id,permalink,caption,comments_count,timestamp'];
+  let body;
+  try { body = await igGet(conn.host, conn.id + '/media', { fields: fields[0], limit: o.limit }, conn.token, fetchFn); }
+  catch (e) { if (e.code !== 100) throw e; body = await igGet(conn.host, conn.id + '/media', { fields: fields[1], limit: o.limit }, conn.token, fetchFn); }
+  const out = [];
+  for (let page = 0; body && page < o.maxPages; page++) {
+    for (const m of body.data || []) { out.push(m); if (o.stopAt && o.stopAt(m)) return out; }
+    const next = igNext(body, conn.host);
+    if (!next || page + 1 >= o.maxPages) break;
+    body = await igGetUrl(next, fetchFn);
+  }
+  return out;
+}
+
+async function igFindMedia(conn, shortcode, fetchFn){
+  const hit = m => m.shortcode === shortcode || String(m.permalink || '').includes('/' + shortcode + '/');
+  const list = await igListMedia(conn, fetchFn, { limit: 100, maxPages: 30, stopAt: hit });
+  return list.find(hit) || null;
+}
+
+// Every top-level comment on a post, oldest first, as [username, text] pairs.
+async function igFetchComments(conn, mediaId, fetchFn, onProgress){
+  const pairs = []; let nameless = 0;
+  let url = igUrl(conn.host, mediaId + '/comments', { fields: 'id,text,username,timestamp', limit: 50 }, conn.token);
+  for (let page = 0; url && page < 600; page++) {
+    const body = await igGetUrl(url, fetchFn);
+    for (const c of body.data || []) { if (c.username) pairs.push([c.username, c.text || '']); else nameless++; }
+    if (onProgress) onProgress(pairs.length);
+    url = igNext(body, conn.host);
+  }
+  pairs.reverse();
+  return { pairs, nameless };
+}
+
 function splitList(s){ return String(s || '').split(/[,\n]+/).map(x => x.trim()).filter(Boolean); }
 
 function compileRules(r){
@@ -583,7 +781,11 @@ const $ = id => document.getElementById(id);
 const plural = (n, one, many) => n.toLocaleString() + ' ' + (n === 1 ? one : (many || one + 's'));
 const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const state = { text: EXAMPLE, rules: Object.assign({}, DEFAULT_RULES), log: [], view: 'all', showAll: false, rolling: false };
+const IG_KEY = 'ig-randomizer.instagram';
+const state = { text: EXAMPLE, fetched: null, rules: Object.assign({}, DEFAULT_RULES), log: [], view: 'all', showAll: false, rolling: false };
+let ig = null;          // { token, host, accounts: [{id, username}], active }
+let igPending = null;   // token waiting for a manually entered account ID
+let igBusy = false;
 let parsed = { entries: [], skipped: [], format: '' };
 let judged = [];
 let pool = [];
@@ -592,7 +794,10 @@ function loadRules(){ try { return JSON.parse(localStorage.getItem(STORE_KEY)) |
 function saveRules(){ try { localStorage.setItem(STORE_KEY, JSON.stringify(state.rules)); } catch (e) {} }
 
 function recompute(){
-  parsed = parseComments(state.text);
+  if (state.fetched) {
+    const r = entriesFromPairs(state.fetched.pairs);
+    parsed = { entries: r.entries, skipped: r.skipped, format: state.fetched.label };
+  } else parsed = parseComments(state.text);
   const drawn = new Set(state.log.map(d => d.key));
   judged = evaluate(parsed.entries, compileRules(state.rules), drawn);
   pool = judged.filter(e => !e.reason);
@@ -752,13 +957,120 @@ function draw(){
 
 function setControlsLocked(on){
   document.querySelectorAll('.paperwork input, .paperwork textarea, .paperwork button, #draw, #reset, #copy').forEach(el => { el.disabled = on; });
-  if (!on) $('draw').disabled = !pool.length;
+  if (!on) { $('draw').disabled = !pool.length; igSetBusy(igBusy); }
 }
 
 function setText(text){
-  state.text = text; state.log = []; state.showAll = false;
+  state.text = text; state.fetched = null; state.log = []; state.showAll = false;
   if ($('comments').value !== text) $('comments').value = text;
   recompute();
+}
+
+function setFetched(pairs, label){
+  state.fetched = { pairs, label };
+  state.text = pairs.map(([u, t]) => '@' + u + (t ? ' ' + String(t).replace(/\s+/g, ' ') : '')).join('\n');
+  state.log = []; state.showAll = false;
+  $('comments').value = state.text;
+  recompute();
+}
+
+/* ----- Instagram connection UI ----- */
+function igLoad(){ try { const v = JSON.parse(localStorage.getItem(IG_KEY)); return v && v.token && Array.isArray(v.accounts) && v.accounts.length ? v : null; } catch (e) { return null; } }
+function igSave(){ try { if (ig) localStorage.setItem(IG_KEY, JSON.stringify(ig)); else localStorage.removeItem(IG_KEY); } catch (e) {} }
+function igConn(){ const a = ig.accounts[ig.active] || ig.accounts[0]; return { host: ig.host, token: ig.token, id: a.id, username: a.username }; }
+function igSay(text, isError){ const s = $('ig-status'); s.hidden = !text; s.textContent = text || ''; s.classList.toggle('is-error', !!isError); }
+function igSetBusy(on){
+  igBusy = on;
+  ['ig-connect-btn', 'ig-manual-btn', 'ig-get', 'ig-disconnect', 'ig-account'].forEach(id => { $(id).disabled = on; });
+  document.querySelectorAll('#ig-posts .post').forEach(b => { b.disabled = on; });
+}
+function igRender(){
+  const on = !!ig;
+  $('ig-connect').hidden = on; $('ig-fetch').hidden = !on; $('ig-disconnect').hidden = !on;
+  const pill = $('ig-state'); pill.hidden = !on;
+  if (on) pill.textContent = 'Connected as @' + igConn().username;
+  const sel = $('ig-account'); sel.hidden = !on || ig.accounts.length < 2; sel.textContent = '';
+  if (on) ig.accounts.forEach((a, i) => { const o = document.createElement('option'); o.value = String(i); o.textContent = '@' + a.username; o.selected = i === ig.active; sel.append(o); });
+  if (!on) { $('ig-posts').textContent = ''; $('ig-manual').hidden = !igPending; }
+}
+function igShowNotes(notes){ $('ig-diag-wrap').hidden = !notes || !notes.length; $('ig-diag').textContent = (notes || []).join('\n'); }
+
+async function igConnect(){
+  const token = $('ig-token').value.trim();
+  if (!token) { igSay('Paste your access token first.', true); return; }
+  igSetBusy(true); igSay('Checking the token with Instagram...'); igShowNotes(null);
+  try {
+    const found = await igDiscover(token);
+    if (found.accounts.length) {
+      ig = { token, host: found.host, accounts: found.accounts, active: 0 }; igPending = null;
+      igSave(); $('ig-token').value = ''; igSay(''); igRender(); await igLoadRecent();
+    } else {
+      igPending = { token, host: found.host }; $('ig-manual').hidden = false; igShowNotes(found.notes);
+      igSay('Connected to Instagram, but the token did not list an account. Enter the account ID below.', true);
+    }
+  } catch (e) { igSay(igErrorText(e), true); }
+  igSetBusy(false);
+}
+
+async function igUseManualId(){
+  const id = $('ig-account-id').value.trim();
+  if (!igPending || !/^\d{5,}$/.test(id)) { igSay('The account ID is a long number with no spaces.', true); return; }
+  igSetBusy(true); igSay('Checking that account...');
+  try {
+    const a = await igGet(igPending.host, id, { fields: 'id,username' }, igPending.token);
+    if (!a.username) throw Object.assign(new Error('That ID is not an Instagram account this token can read.'), { kind: 'graph' });
+    ig = { token: igPending.token, host: igPending.host, accounts: [{ id, username: a.username }], active: 0 }; igPending = null;
+    igSave(); $('ig-token').value = ''; $('ig-account-id').value = ''; igShowNotes(null); igSay(''); igRender(); await igLoadRecent();
+  } catch (e) { igSay(igErrorText(e), true); }
+  igSetBusy(false);
+}
+
+function igDisconnect(){
+  ig = null; igPending = null; igSave(); igShowNotes(null); igSay('Disconnected. The token was removed from this browser.'); igRender();
+}
+
+async function igLoadRecent(){
+  if (!ig) return;
+  const list = $('ig-posts'); list.textContent = '';
+  try {
+    const posts = await igListMedia(igConn(), null, { limit: 12, maxPages: 1 });
+    for (const m of posts) {
+      const li = document.createElement('li'); const b = document.createElement('button'); b.type = 'button'; b.className = 'post';
+      const cap = document.createElement('span'); cap.className = 'cap'; cap.textContent = (m.caption || '(no caption)').replace(/\s+/g, ' ').slice(0, 90);
+      const when = document.createElement('span'); when.className = 'when';
+      when.textContent = m.timestamp ? new Date(m.timestamp.replace(/\+0000$/, 'Z')).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+      const count = document.createElement('span'); count.className = 'count'; count.textContent = plural(m.comments_count || 0, 'comment');
+      b.append(cap, count, when); b.addEventListener('click', () => igPull(m)); li.append(b); list.append(li);
+    }
+    if (!posts.length) igSay('This account has no posts yet.');
+  } catch (e) { igSay(igErrorText(e), true); }
+}
+
+async function igPull(media){
+  if (igBusy || state.rolling) return;
+  igSetBusy(true); igSay('Getting comments...');
+  try {
+    const r = await igFetchComments(igConn(), media.id, null, n => igSay('Getting comments... ' + n.toLocaleString() + ' so far'));
+    if (!r.pairs.length) igSay('That post has no comments Instagram will share yet.' + (r.nameless ? ' ' + plural(r.nameless, 'comment') + ' came back without a username, which means the token lacks instagram_manage_comments.' : ''), true);
+    else {
+      setFetched(r.pairs, 'from Instagram');
+      const total = media.comments_count;
+      igSay('Loaded ' + plural(r.pairs.length, 'comment') + (total > r.pairs.length ? '. Instagram counts ' + total.toLocaleString() + ' including replies, which are not entered.' : '.'));
+    }
+  } catch (e) { igSay(igErrorText(e), true); }
+  igSetBusy(false);
+}
+
+async function igGetFromLink(){
+  const code = igShortcode($('ig-link').value);
+  if (!code) { igSay('That does not look like a post link. It should contain /p/ or /reel/ followed by a code.', true); return; }
+  igSetBusy(true); igSay('Looking for that post on @' + igConn().username + '...');
+  let media = null;
+  try { media = await igFindMedia(igConn(), code); }
+  catch (e) { igSay(igErrorText(e), true); igSetBusy(false); return; }
+  igSetBusy(false);
+  if (!media) { igSay('That post is not on @' + igConn().username + '. Instagram only shares comments from your own posts.', true); return; }
+  await igPull(media);
 }
 
 function readFile(file){
@@ -814,6 +1126,15 @@ function start(saved){
 
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { state.view = b.dataset.view; state.showAll = false; renderEntries(); }));
   $('show-all').addEventListener('click', () => { state.showAll = true; renderEntries(); });
+
+  $('ig-connect-btn').addEventListener('click', igConnect);
+  $('ig-token').addEventListener('keydown', e => { if (e.key === 'Enter') igConnect(); });
+  $('ig-manual-btn').addEventListener('click', igUseManualId);
+  $('ig-disconnect').addEventListener('click', igDisconnect);
+  $('ig-get').addEventListener('click', igGetFromLink);
+  $('ig-link').addEventListener('keydown', e => { if (e.key === 'Enter') igGetFromLink(); });
+  $('ig-account').addEventListener('change', e => { ig.active = parseInt(e.target.value, 10) || 0; igSave(); igRender(); igLoadRecent(); });
+  ig = igLoad(); igRender(); if (ig) igLoadRecent();
 
   $('draw').addEventListener('click', draw);
   $('reset').addEventListener('click', () => { state.log = []; $('ticket').classList.remove('is-won'); recompute(); });

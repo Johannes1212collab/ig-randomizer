@@ -1,6 +1,6 @@
 // Keeps IG Randomizer working without a connection once it has been opened.
 // Network first, so a new version shows up as soon as the phone is online.
-const CACHE = 'ig-randomizer-v1';
+const CACHE = 'ig-randomizer-v2';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', event => {
